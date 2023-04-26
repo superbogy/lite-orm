@@ -5,7 +5,7 @@ import { isEmpty, pick, has } from 'ramda';
 import { Database, ISqlite } from 'sqlite';
 import { TimestampSchema, ColumnSchema } from './schema';
 
-const debug = Debug('@egos/lite:model');
+const debug = Debug('lite-orm:model');
 export class Model {
   private _db: Database;
   public _table: string;
@@ -42,9 +42,15 @@ export class Model {
 
   initialize(): Model {
     const schema = this.schema;
-    Object.keys(schema).forEach((key) => {
-      this._pk.push(key);
-    });
+    this._pk = Object.entries(schema)
+      .filter((item) => {
+        const v = item[1] as ColumnSchema;
+        return !!v.pk;
+      })
+      .map((item) => {
+        const [k] = item;
+        return k;
+      });
     if (this.options?.timestamp) {
       Reflect.defineMetadata(
         'model:schema',
@@ -52,7 +58,6 @@ export class Model {
         this,
       );
     }
-    console.log(this.schema);
     if (this.options?.db) {
       this._db = this.options.db;
     }
@@ -98,7 +103,9 @@ export class Model {
     const schema = this.schema;
     const data: Record<string, any> = {};
     Object.keys(schema).forEach((k: string) => {
-      data[k] = this[k];
+      if (has(k, this)) {
+        data[k] = this[k];
+      }
     });
     return { ...this._attributes, ...data };
   }
@@ -118,7 +125,6 @@ export class Model {
 
   purify(data: Dict): Dict {
     return Object.entries(data).reduce((acc: Dict, [key, val]) => {
-      console.log('purify reduce', acc, key, val);
       return { ...acc, [key]: this.encode(key, val) };
     }, {});
   }
@@ -197,6 +203,72 @@ export class Model {
     return stmt[method](params);
   }
 
+  async insert(payload: Dict, options?: InsertOpts): Promise<Model | number> {
+    const builder = new Builder({});
+    const data = this.toRowData(this.purify({ ...payload }));
+    const defaultData = this.toRowData(this.defaultData());
+    const { sql, params } = builder
+      .table(this.table)
+      .insert({ ...defaultData, ...data });
+    const res = await this.call('run', sql, params);
+    const { lastID } = res;
+    if (this.options?.onInsert) {
+      await Promise.resolve(this.options.onInsert);
+    }
+    if (options?.lastId) {
+      return lastID;
+    }
+    return (await this.findById(lastID)) as Model;
+  }
+
+  async create(data: Dict, options?: InsertOpts): Promise<Model | number> {
+    return this.insert(data, options);
+  }
+
+  async update(where: Dict, payload: Dict): Promise<ISqlite.RunResult> {
+    const builder = new Builder({});
+    const data = this.purify(payload);
+    console.log('data', data);
+    const witTimestamp = this.attachTimestamp(data);
+    console.log(witTimestamp);
+    const row = this.toRowData(witTimestamp);
+    console.log('123123', row, where);
+    const { sql, params } = builder
+      .table(this.table)
+      .where(where)
+      .update({ ...row });
+    console.log(sql, params);
+    const res = await this.call('run', sql, params);
+    await this.onChange(row);
+    return res;
+  }
+
+  updateAttributes(payload: Dict): Promise<Model> {
+    if (!this._pk) {
+      throw new Error('updateAttributes must be called on instance');
+    }
+    const current = this._attributes;
+    Object.entries(payload).map((item) => {
+      const [key, value] = item;
+      if (has(key, current)) {
+        this[key] = value;
+      }
+    });
+
+    return this.save();
+  }
+
+  async upsert(data: Dict): Promise<Model> {
+    if (data.id) {
+      const record = await this.findById(data.id);
+      if (record) {
+        return record.updateAttributes(data);
+      }
+    }
+
+    return (await this.insert(data)) as Model;
+  }
+
   async find(where: Dict = {}, options: FindOpts = {}): Promise<Model[]> {
     const { limit, offset, order, fields, group } = options;
     const builder = new Builder({});
@@ -234,8 +306,8 @@ export class Model {
     return null;
   }
 
-  findAll(where: Dict, options: FindOpts): Promise<Model[]> {
-    return this.find(where, options);
+  findAll(options?: FindOpts): Promise<Model[]> {
+    return this.find({}, options);
   }
 
   findById(id: number | string, options?: FindOpts): Promise<Model | null> {
@@ -271,66 +343,6 @@ export class Model {
     }
   }
 
-  async create(data: Dict, options?: InsertOpts): Promise<Model | number> {
-    return this.insert(data, options);
-  }
-
-  async insert(payload: Dict, options?: InsertOpts): Promise<Model | number> {
-    const builder = new Builder({});
-    const data = this.toRowData(this.purify({ ...payload }));
-    console.log('xxxxx', data);
-    const defaultData = this.toRowData(this.defaultData());
-    const { sql, params } = builder
-      .table(this.table)
-      .insert({ ...defaultData, ...data });
-    const { lastID } = await this.call('run', sql, params);
-    if (this.options?.onInsert) {
-      await Promise.resolve(this.options.onInsert);
-    }
-    if (options?.lastId) {
-      return lastID;
-    }
-    return (await this.findById(lastID)) as Model;
-  }
-
-  async update(where: Dict, payload: Dict): Promise<ISqlite.RunResult> {
-    const builder = new Builder({});
-    const data = this.toRowData(this.attachTimestamp(this.purify(payload)));
-    const { sql, params } = builder
-      .table(this.table)
-      .where(where)
-      .update({ ...data });
-    const res = await this.call('run', sql, params);
-    await this.onChange(data);
-    return res;
-  }
-
-  updateAttributes(payload: Dict): Promise<Model> {
-    if (!this._pk) {
-      throw new Error('updateAttributes must be called on instance');
-    }
-    const current = this._attributes;
-    Object.entries(payload).map((item) => {
-      const [key, value] = item;
-      if (has(key, current)) {
-        this[key] = value;
-      }
-    });
-
-    return this.save();
-  }
-
-  async upsert(data: Dict): Promise<Model> {
-    if (data.id) {
-      const record = await this.findById(data.id);
-      if (record) {
-        return record.updateAttributes(data);
-      }
-    }
-
-    return (await this.insert(data)) as Model;
-  }
-
   getChange() {
     const res = Object.entries(this._attributes).reduce(
       (acc: Dict, cur: any[]) => {
@@ -364,6 +376,7 @@ export class Model {
     if (!Object.keys(changed).length) {
       return this;
     }
+    console.log(this._pk, changed);
     await this.update(pk, changed);
     return (await this.findOne(pk)) as Model;
   }

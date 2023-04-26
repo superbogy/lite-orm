@@ -7,7 +7,7 @@ import 'reflect-metadata';
 import { genSql } from '../../src/utils';
 import { Job } from '../../src/migration';
 
-@connect({ name: 'default', filename: '' })
+@connect('default')
 @table('m_users')
 class User extends Model {
   @column({ type: FieldTypes.INT, pk: true, autoIncrement: true })
@@ -25,7 +25,6 @@ class User extends Model {
 export default class UserJob extends Job {
   async up() {
     const user = new User();
-    console.log('uuuuuuu', user);
     await this.dropTable(user.table);
     await this.exec(genSql(user.table, user.schema));
     await this.addColumn(user.table, {

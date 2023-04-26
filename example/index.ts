@@ -4,7 +4,6 @@ import { FieldTypes } from '../src/schema';
 import 'reflect-metadata';
 import { genSql } from '../src/utils';
 import { addConnection } from '../src/decorators';
-import { Database } from 'sqlite3';
 
 @connect('default')
 @table('users')
@@ -39,62 +38,68 @@ const main = async () => {
     profile: { bar: 'foo', quiz: 'biz' },
     parentId: 0,
   })) as User;
-  const cur = (await user.findById(current.id)) as User;
-  console.log(cur.toObject());
-  const users = await user.find(
-    {
-      parentId: 0,
-    },
-    { rows: true },
-  );
-  console.log(users);
-  const inRes = await user.count({ id: { $in: [current.id, 2] } });
-  console.log(inRes);
-  // const con = {
-  //   $or: [
-  //     { $and: [{ name: 1 }, { age: 2 }] },
-  //     { $or: [{ mail: 2 }, { gender: 'male' }] },
-  //   ],
-  // };
+  // const cur = (await user.findById(current.id)) as User;
+  // cur.age = 1;
+  // const newRecord = await cur.save();
+  // console.log('newRecord', newRecord);
+  // console.log(cur.toObject());
+  // const users = await user.find(
+  //   {
+  //     parentId: 0,
+  //   },
+  //   { rows: true },
+  // );
+  // console.log('users', users);
+  // const inRes = await user.count({ id: { $in: [current.id, 2] } });
+  // console.log(inRes);
+  const con = {
+    $or: [
+      { $and: [{ name: 1 }, { age: { $in: [1] } }] },
+      { $or: [{ mail: 2 }, { gender: 'male' }] },
+    ],
+  };
+  // SELECT * FROM `users` WHERE ((name = ? AND age = ?) OR (mail = ? OR gender = ?)) LIMIT ?, [params]: [1,2,2,"male",1]
+  console.log('%j', con);
+  const orQuery = await user.findOne(con);
+  console.log('orQuery', orQuery);
   // const c1 = {
   //   $and: [{ mail: 2 }, { gender: 'male' }],
   //   $or: [{ name: 1 }, { age: 2 }],
   // };
-  // console.log('%j', con);
   // const c = { age: 1, name: 2, gender: 3 };
-  // const orQuery = await user.findOne(con);
+
   // console.log(orQuery);
-  const user1 = (await user.findOne(
-    { id: { $gte: 1, $lte: 200 } },
-    { order: { id: ORDER_TYPE.DESC, age: ORDER_TYPE.ASC } },
-  )) as User;
-  console.log(user1);
-  user1.name = 'tom';
-  const user2 = await user1.save();
-  console.log(user2.name); // tom
-  assert(typeof user1.profile === 'object');
-  const check = (await user.findById(user1.id)) as User;
-  console.log('check findById %j', check.toObject());
-  const u2 = await user.upsert({
-    id: user1.id + 1,
-    name: 'tommy',
-    gender: 'male',
-    age: user1.age + 1,
-    mail: 'tommy@hello.cc',
-    profile: { bar: 'quz', quiz: 'biz' },
-  });
-  u2.gender = 'female';
-  console.log('user2', u2.toJSON());
-  await u2.save();
-  assert(u2.age === user1.age + 1);
-  const updated = await u2.updateAttributes({ name: 'tommy2' });
-  assert(updated.name === 'tommy2');
-  console.log('updated result %j', updated);
-  const removed = await user1.remove();
-  console.log('removed result %j', removed);
-  const checkRemoved = await user.findById(user1.id);
-  assert(checkRemoved === null);
-  console.log('check removed result', checkRemoved);
+  // const user1 = (await user.findOne(
+  //   { id: { $gte: 1, $lte: 200 } },
+  //   { order: { id: ORDER_TYPE.DESC, age: ORDER_TYPE.ASC } },
+  // )) as User;
+  // console.log(user1);
+  // user1.name = 'tom';
+  // const user2 = await user1.save();
+  // console.log(user2.name); // tom
+  // assert(typeof user1.profile === 'object');
+  // const check = (await user.findById(user1.id)) as User;
+  // console.log('check findById %j', check.toObject());
+  // const u2 = await user.upsert({
+  //   id: user1.id + 1,
+  //   name: 'tommy',
+  //   gender: 'male',
+  //   age: user1.age + 1,
+  //   mail: 'tommy@hello.cc',
+  //   profile: { bar: 'quz', quiz: 'biz' },
+  // });
+  // u2.gender = 'female';
+  // console.log('user2', u2.toJSON());
+  // await u2.save();
+  // assert(u2.age === user1.age + 1);
+  // const updated = await u2.updateAttributes({ name: 'tommy2' });
+  // assert(updated.name === 'tommy2');
+  // console.log('updated result %j', updated);
+  // const removed = await user1.remove();
+  // console.log('removed result %j', removed);
+  // const checkRemoved = await user.findById(user1.id);
+  // assert(checkRemoved === null);
+  // console.log('check removed result', checkRemoved);
 };
 
 main().then(() => process.exit(0));

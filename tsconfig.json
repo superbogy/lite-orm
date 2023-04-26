@@ -19,8 +19,9 @@
     "emitDeclarationOnly": false,
     "resolveJsonModule": true,
     "experimentalDecorators": true,
-    "strictPropertyInitialization": false
+    "strictPropertyInitialization": false,
+    "moduleResolution": "node"
   },
-  "include": ["./src/**/*"],
+  "include": ["./src/**/*", "example"],
   "exclude": ["node_modules", "dist", "test", "docs", "tests"]
 }

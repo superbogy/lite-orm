@@ -8,7 +8,7 @@ import { Model } from './model';
 import { columnToSql, genSql } from './utils';
 import Debug from 'debug';
 
-const debug = Debug('@egos/lite:migrate');
+const debug = Debug('lite-orm:migrate');
 
 export class Job {
   private db: Database;
